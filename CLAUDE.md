@@ -78,6 +78,12 @@ npm run dev
 
 # Production mode
 npm start
+
+# Using the CLI executable (after npm install)
+acpcode
+
+# Or run directly
+node bin/acpcode.js
 ```
 
 ## TUI Commands

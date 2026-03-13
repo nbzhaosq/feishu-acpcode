@@ -44,7 +44,24 @@ Copy `config.example.json` to `config.json` and fill in your Feishu app credenti
 ### 3. Run
 
 ```bash
+# Development mode with hot reload
 npm run dev
+
+# Production mode
+npm start
+
+# Or use the CLI executable
+acpcode
+```
+
+### Global Installation (Optional)
+
+```bash
+# Install globally
+npm install -g feishu-acpcode
+
+# Run from anywhere
+acpcode
 ```
 
 ## TUI Dashboard
