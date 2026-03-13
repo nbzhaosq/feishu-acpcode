@@ -8,6 +8,7 @@ import {
 import { botEvents, type LogMessage, type BotStatus } from '../../lark/events.js';
 import { getConfig, getDefaultWorkspace } from '../../config.js';
 import { getAllChatSessions } from '../../acpx/session.js';
+import { getRunningTaskCount, cancelAllTasks } from '../../acpx/executor.js';
 
 const MAX_MESSAGES = 100;
 
@@ -19,6 +20,7 @@ export function useBotManager() {
     uptime: 0,
     messageCount: 0,
     sessionCount: 0,
+    runningTaskCount: 0,
     agent: config.agents.default,
     workspace: getDefaultWorkspace().name,
   });
@@ -62,10 +64,12 @@ export function useBotManager() {
       uptimeIntervalRef.current = setInterval(() => {
         const sessions = getAllChatSessions();
         const uptime = Math.floor((Date.now() - connectionStartTime) / 1000);
+        const taskCount = getRunningTaskCount();
         setStatus(prev => ({
           ...prev,
           uptime,
           sessionCount: sessions.length,
+          runningTaskCount: taskCount,
         }));
       }, 1000);
     } else {
@@ -94,10 +98,27 @@ export function useBotManager() {
     await disconnect();
   }, []);
 
+  const handleCancelAllTasks = useCallback(() => {
+    const count = cancelAllTasks();
+    if (count > 0) {
+      addLocalMessage('system', `Cancelled ${count} running task(s)`);
+    }
+    setStatus(prev => ({ ...prev, runningTaskCount: 0 }));
+    return count;
+  }, []);
+
   const toggleVerbose = useCallback(() => {
     setVerboseLogs(prev => !prev);
     return !verboseLogs;
   }, [verboseLogs]);
+
+  const addLocalMessage = useCallback((type: LogMessage['type'], text: string) => {
+    setMessages(prev => [...prev, {
+      timestamp: new Date(),
+      type,
+      text,
+    }]);
+  }, []);
 
   return {
     status,
@@ -105,6 +126,8 @@ export function useBotManager() {
     verboseLogs,
     handleConnect,
     handleDisconnect,
+    handleCancelAllTasks,
     toggleVerbose,
+    addLocalMessage,
   };
 }

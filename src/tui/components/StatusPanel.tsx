@@ -8,6 +8,7 @@ interface StatusPanelProps {
   uptime: number;
   messageCount: number;
   sessionCount: number;
+  runningTaskCount: number;
   agent: string;
   workspace: string;
 }
@@ -29,6 +30,7 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({
   uptime,
   messageCount,
   sessionCount,
+  runningTaskCount,
   agent,
   workspace,
 }) => {
@@ -65,6 +67,14 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({
             <Text color="yellow">{sessionCount}</Text>
           </Box>
         </>
+      )}
+
+      {/* Running tasks - show if any */}
+      {runningTaskCount > 0 && (
+        <Box marginTop={1}>
+          <Text bold color="red">🤖 Agents ({runningTaskCount})</Text>
+          <Text color="yellow">{runningTaskCount} task(s) running</Text>
+        </Box>
       )}
 
       <Box flexDirection="column" marginTop={1}>

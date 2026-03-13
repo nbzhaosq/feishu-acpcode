@@ -306,10 +306,24 @@ export function cancelTask(chatId: string): boolean {
   return true;
 }
 
+export function cancelAllTasks(): number {
+  const count = runningTasks.size;
+  for (const [chatId, task] of runningTasks.entries()) {
+    logger.info(`Cancelling task: ${chatId}`);
+    task.process.kill('SIGTERM');
+    runningTasks.delete(chatId);
+  }
+  return count;
+}
+
 export function getRunningTask(chatId: string): RunningTask | undefined {
   return runningTasks.get(chatId);
 }
 
 export function getAllRunningTasks(): Map<string, RunningTask> {
   return new Map(runningTasks);
+}
+
+export function getRunningTaskCount(): number {
+  return runningTasks.size;
 }

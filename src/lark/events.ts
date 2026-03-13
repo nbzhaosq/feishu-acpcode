@@ -16,6 +16,7 @@ export interface BotStatus {
   uptime: number;
   messageCount: number;
   sessionCount: number;
+  runningTaskCount: number;
   agent: string;
   workspace: string;
 }

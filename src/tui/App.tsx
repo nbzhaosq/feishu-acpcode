@@ -12,7 +12,8 @@ import type { LogMessage } from '../lark/events.js';
 const COMMANDS_HELP = `
 Available commands:
   /start          - Connect to Feishu
-  /stop           - Disconnect from Feishu
+  /stop           - Disconnect from Feishu (also stops all agents)
+  /cancel         - Cancel all running agent tasks
   /status         - Show detailed status
   /clear          - Clear chat session history
   /agent <name>   - Switch agent (claude, opencode, codex)
@@ -34,7 +35,9 @@ export function App() {
     verboseLogs,
     handleConnect,
     handleDisconnect,
+    handleCancelAllTasks,
     toggleVerbose,
+    addLocalMessage: addBotLocalMessage,
   } = useBotManager();
 
   const [localMessages, setLocalMessages] = useState<LogMessage[]>([]);
@@ -91,6 +94,15 @@ export function App() {
 
       case '/clear':
         addLocalMessage('system', 'Clear command is for Feishu chat sessions. Use /help for commands.');
+        break;
+
+      case '/cancel':
+        if (status.runningTaskCount === 0) {
+          addLocalMessage('system', 'No running tasks to cancel');
+        } else {
+          const count = handleCancelAllTasks();
+          addLocalMessage('system', `Cancelled ${count} running task(s)`);
+        }
         break;
 
       case '/agent':
@@ -175,6 +187,7 @@ export function App() {
           uptime={status.uptime}
           messageCount={status.messageCount}
           sessionCount={status.sessionCount}
+          runningTaskCount={status.runningTaskCount}
           agent={status.agent}
           workspace={status.workspace}
         />

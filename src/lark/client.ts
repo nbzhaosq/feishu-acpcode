@@ -41,6 +41,7 @@ export async function connect(): Promise<void> {
     uptime: 0,
     messageCount,
     sessionCount: 0,
+    runningTaskCount: 0,
     agent: config.agents.default,
     workspace: config.workspaces.find(w => w.default)?.name || config.workspaces[0].name,
   });
@@ -93,6 +94,7 @@ export async function connect(): Promise<void> {
       uptime: 0,
       messageCount,
       sessionCount: 0,
+      runningTaskCount: 0,
       agent: config.agents.default,
       workspace: config.workspaces.find(w => w.default)?.name || config.workspaces[0].name,
     });
@@ -112,6 +114,7 @@ export async function connect(): Promise<void> {
       uptime: 0,
       messageCount,
       sessionCount: 0,
+      runningTaskCount: 0,
       agent: config.agents.default,
       workspace: config.workspaces.find(w => w.default)?.name || config.workspaces[0].name,
     });
@@ -128,6 +131,18 @@ export async function connect(): Promise<void> {
 
 export async function disconnect(): Promise<void> {
   if (wsClient) {
+    // Cancel all running agent tasks first
+    const { cancelAllTasks } = await import('../acpx/executor.js');
+    const cancelledCount = cancelAllTasks();
+    if (cancelledCount > 0) {
+      logger.info(`Cancelled ${cancelledCount} running agent task(s)`);
+      botEvents.emit('message', {
+        timestamp: new Date(),
+        type: 'system',
+        text: `Cancelled ${cancelledCount} running agent task(s)`,
+      });
+    }
+
     wsClient.close();
     wsClient = null;
     isConnected = false;
@@ -139,6 +154,7 @@ export async function disconnect(): Promise<void> {
       uptime: 0,
       messageCount,
       sessionCount: 0,
+      runningTaskCount: 0,
       agent: '',
       workspace: '',
     });
@@ -158,12 +174,14 @@ export async function reconnect(): Promise<void> {
 
 export function getBotStatus(): BotStatus {
   const config = getConfig();
+  const { getRunningTaskCount } = require('../acpx/executor.js');
 
   return {
     connectionStatus: isConnected ? 'connected' : 'disconnected',
     uptime: connectionStartTime ? Math.floor((Date.now() - connectionStartTime) / 1000) : 0,
     messageCount,
     sessionCount: 0, // Session count tracked by useBotManager hook
+    runningTaskCount: getRunningTaskCount(),
     agent: config.agents.default,
     workspace: config.workspaces.find(w => w.default)?.name || config.workspaces[0].name,
   };
