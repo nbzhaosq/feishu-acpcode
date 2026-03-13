@@ -1,0 +1,21 @@
+{
+  "name": "feishu-acpcode",
+  "version": "1.0.0",
+  "description": "飞书机器人,通过 acpx 调用 Claude Code、OpenCode 等 ACP 代理",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.30.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.0"
+  }
+}
