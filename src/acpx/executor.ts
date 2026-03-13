@@ -33,6 +33,9 @@ interface RunningTask {
 
 const runningTasks = new Map<string, RunningTask>();
 
+// Track all spawned process PIDs for cleanup
+const spawnedPids = new Set<number>();
+
 // Cleanup timed-out tasks
 let cleanupInterval: NodeJS.Timeout | null = setInterval(() => {
   const now = Date.now();
@@ -48,6 +51,48 @@ let cleanupInterval: NodeJS.Timeout | null = setInterval(() => {
 }, 60 * 1000); // Check every minute
 
 /**
+ * Kill a process and all its children using process group.
+ * When spawn is called with detached: true, -pid kills the entire process group.
+ */
+function killProcessTree(proc: ChildProcess): void {
+  if (proc.pid) {
+    try {
+      // Negative PID kills the entire process group
+      process.kill(-proc.pid, 'SIGKILL');
+    } catch {
+      // Fallback to regular kill if process group kill fails
+      proc.kill('SIGKILL');
+    }
+  }
+}
+
+/**
+ * Kill all tracked processes and acpx-related processes.
+ */
+function killAllACPXProcesses(): void {
+  // Kill all tracked PIDs
+  for (const pid of spawnedPids) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      // Process might already be dead
+    }
+  }
+  spawnedPids.clear();
+
+  // Use pkill to kill any remaining acpx-related processes
+  // This handles processes spawned by acpx internally (like __queue-owner)
+  try {
+    const { execSync } = require('child_process');
+    // Kill acpx and claude-agent-acp processes
+    execSync('pkill -f "acpx.*__queue-owner" 2>/dev/null || true', { timeout: 1000 });
+    execSync('pkill -f "claude-agent-acp" 2>/dev/null || true', { timeout: 1000 });
+  } catch {
+    // Ignore errors from pkill
+  }
+}
+
+/**
  * Shutdown executor - clear intervals and cancel all tasks.
  * Call this before process exit to ensure clean shutdown.
  */
@@ -59,6 +104,8 @@ export function shutdownExecutor(): void {
   }
   // Cancel any running tasks
   cancelAllTasks();
+  // Kill all acpx-related processes
+  killAllACPXProcesses();
 }
 
 /**
@@ -190,6 +237,11 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
     detached: true, // Create new process group for clean termination
   });
 
+  // Track PID for cleanup
+  if (childProcess.pid) {
+    spawnedPids.add(childProcess.pid);
+  }
+
   const task: RunningTask = {
     process: childProcess,
     output,
@@ -250,6 +302,10 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
 
     childProcess.on('close', (code) => {
       runningTasks.delete(messageCtx.chatId);
+      // Remove PID from tracking
+      if (childProcess.pid) {
+        spawnedPids.delete(childProcess.pid);
+      }
 
       // Only treat as error if code is explicitly non-zero (not null/undefined)
       // null means process was killed by signal, which may be intentional
@@ -317,22 +373,6 @@ async function updateCard(
   });
 
   await updateCardMessage(ctx, messageId, card);
-}
-
-/**
- * Kill a process and all its children using process group.
- * When spawn is called with detached: true, -pid kills the entire process group.
- */
-function killProcessTree(proc: ChildProcess): void {
-  if (proc.pid) {
-    try {
-      // Negative PID kills the entire process group
-      process.kill(-proc.pid, 'SIGTERM');
-    } catch {
-      // Fallback to regular kill if process group kill fails
-      proc.kill('SIGTERM');
-    }
-  }
 }
 
 export function cancelTask(chatId: string): boolean {
