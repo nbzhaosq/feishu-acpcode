@@ -1,0 +1,27 @@
+{
+  "lark": {
+    "appId": "cli_xxxxxxxxxxxx",
+    "appSecret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "workspaces": [
+    {
+      "name": "my-project",
+      "path": "/Users/xxx/projects/my-project",
+      "default": true
+    },
+    {
+      "name": "another-project",
+      "path": "/Users/xxx/projects/another-project"
+    }
+  ],
+  "agents": {
+    "default": "claude",
+    "available": ["claude", "opencode", "codex"]
+  },
+  "acpx": {
+    "path": "acpx",
+    "timeout": 300000,
+    "ttl": 300,
+    "throttleInterval": 1500
+  }
+}
