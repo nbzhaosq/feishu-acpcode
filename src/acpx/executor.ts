@@ -41,7 +41,7 @@ let cleanupInterval: NodeJS.Timeout | null = setInterval(() => {
   for (const [messageId, task] of runningTasks.entries()) {
     if (now - task.lastActivity > TIMEOUT) {
       logger.warn(`Task timed out, terminating process: ${messageId}`);
-      task.process.kill('SIGTERM');
+      killProcessTree(task.process);
       runningTasks.delete(messageId);
     }
   }
@@ -136,7 +136,7 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
   const existingTask = runningTasks.get(messageCtx.chatId);
   if (existingTask) {
     logger.warn('Task already running, terminating old task');
-    existingTask.process.kill('SIGTERM');
+    killProcessTree(existingTask.process);
     runningTasks.delete(messageCtx.chatId);
   }
 
@@ -184,13 +184,14 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
 
   logger.info(`Executing acpx: ${acpxPath} ${args.join(' ')}`);
 
-  // Start process
-  const process = spawn(acpxPath, args, {
+  // Start process with detached mode for proper cleanup
+  const childProcess = spawn(acpxPath, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
+    detached: true, // Create new process group for clean termination
   });
 
   const task: RunningTask = {
-    process,
+    process: childProcess,
     output,
     messageId,
     lastCardUpdate: 0,
@@ -202,7 +203,7 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
   return new Promise((resolve, reject) => {
     let buffer = '';
 
-    process.stdout.on('data', (data) => {
+    childProcess.stdout.on('data', (data) => {
       buffer += data.toString();
 
       // Process line by line
@@ -243,11 +244,11 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
       }
     });
 
-    process.stderr.on('data', (data) => {
+    childProcess.stderr.on('data', (data) => {
       logger.error('acpx stderr:', data.toString());
     });
 
-    process.on('close', (code) => {
+    childProcess.on('close', (code) => {
       runningTasks.delete(messageCtx.chatId);
 
       // Only treat as error if code is explicitly non-zero (not null/undefined)
@@ -271,7 +272,7 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
       });
     });
 
-    process.on('error', (err) => {
+    childProcess.on('error', (err) => {
       runningTasks.delete(messageCtx.chatId);
       logger.error('acpx process error:', err);
       output.error = err.message;
@@ -318,11 +319,27 @@ async function updateCard(
   await updateCardMessage(ctx, messageId, card);
 }
 
+/**
+ * Kill a process and all its children using process group.
+ * When spawn is called with detached: true, -pid kills the entire process group.
+ */
+function killProcessTree(proc: ChildProcess): void {
+  if (proc.pid) {
+    try {
+      // Negative PID kills the entire process group
+      process.kill(-proc.pid, 'SIGTERM');
+    } catch {
+      // Fallback to regular kill if process group kill fails
+      proc.kill('SIGTERM');
+    }
+  }
+}
+
 export function cancelTask(chatId: string): boolean {
   const task = runningTasks.get(chatId);
   if (!task) return false;
 
-  task.process.kill('SIGTERM');
+  killProcessTree(task.process);
   runningTasks.delete(chatId);
   return true;
 }
@@ -331,7 +348,7 @@ export function cancelAllTasks(): number {
   const count = runningTasks.size;
   for (const [chatId, task] of runningTasks.entries()) {
     logger.info(`Cancelling task: ${chatId}`);
-    task.process.kill('SIGTERM');
+    killProcessTree(task.process);
     runningTasks.delete(chatId);
   }
   return count;
