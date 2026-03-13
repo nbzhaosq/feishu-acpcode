@@ -88,6 +88,9 @@ export function updateParsedOutput(output: ParsedOutput, msg: ACPMessage): Parse
     stopReason: output.stopReason,
   };
 
+  // Debug log all messages
+  logger.debug('ACP message:', JSON.stringify(msg, null, 2));
+
   // Handle error response
   if (msg.error) {
     newOutput.error = msg.error.message || 'Unknown error';
@@ -110,9 +113,20 @@ export function updateParsedOutput(output: ParsedOutput, msg: ACPMessage): Parse
     const sessionUpdate = update.sessionUpdate;
     const content = update.content;
 
-    if (sessionUpdate === 'agent_thought_chunk' && content?.text) {
+    // Debug log session update details
+    logger.debug(`Session update: ${sessionUpdate}`, content);
+
+    // Handle thinking/thought content - support multiple formats
+    const isThinking =
+      sessionUpdate === 'agent_thought_chunk' ||
+      sessionUpdate === 'thinking' ||
+      content?.type === 'thinking' ||
+      content?.type === 'thought';
+
+    if (isThinking && content?.text) {
       // Accumulate thinking chunks
       newOutput.thinking.push(content.text);
+      logger.debug(`Thinking chunk: ${content.text.slice(0, 100)}...`);
     } else if (sessionUpdate === 'agent_message_chunk' && content?.text) {
       // Accumulate message chunks
       newOutput.text += content.text;
