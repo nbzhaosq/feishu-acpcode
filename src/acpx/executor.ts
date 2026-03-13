@@ -34,7 +34,7 @@ interface RunningTask {
 const runningTasks = new Map<string, RunningTask>();
 
 // Cleanup timed-out tasks
-setInterval(() => {
+let cleanupInterval: NodeJS.Timeout | null = setInterval(() => {
   const now = Date.now();
   const TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
@@ -46,6 +46,20 @@ setInterval(() => {
     }
   }
 }, 60 * 1000); // Check every minute
+
+/**
+ * Shutdown executor - clear intervals and cancel all tasks.
+ * Call this before process exit to ensure clean shutdown.
+ */
+export function shutdownExecutor(): void {
+  // Clear the cleanup interval
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+  // Cancel any running tasks
+  cancelAllTasks();
+}
 
 /**
  * Ensure an acpx session exists for the given workspace and agent.

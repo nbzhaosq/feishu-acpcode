@@ -7,6 +7,7 @@ import { logger } from './utils/logger.js';
 import { registerCommand } from './commands/router.js';
 import { sendTextMessage, type MessageContext } from './lark/message.js';
 import { getConnectionStatus, connect, disconnect } from './lark/client.js';
+import { shutdownExecutor } from './acpx/executor.js';
 
 // Register Feishu-side commands (these are used when bot receives messages in Feishu)
 registerCommand('connect', async (ctx: MessageContext) => {
@@ -77,7 +78,11 @@ async function main(): Promise<void> {
       await disconnect();
     }
 
+    // Shutdown executor to clear intervals and cancel tasks
+    shutdownExecutor();
+
     logger.info('Bot shutdown complete');
+    process.exit(0);
   } catch (error) {
     logger.error('Startup failed:', error);
     process.exit(1);
