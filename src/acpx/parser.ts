@@ -26,7 +26,7 @@ export interface ACPXEvent {
 
 export interface ParsedOutput {
   thinking: string[];
-  toolCalls: Map<string, { name: string; status: string; output?: string }>;
+  toolCalls: Map<string, { name: string; status: 'running' | 'completed' | 'failed'; output?: string }>;
   text: string;
   done: boolean;
   error?: string;
@@ -138,10 +138,10 @@ export function updateParsedOutput(output: ParsedOutput, event: ACPXEvent): Pars
   return newOutput;
 }
 
-export function getToolCallsArray(output: ParsedOutput): Array<{ name: string; status: string }> {
+export function getToolCallsArray(output: ParsedOutput): Array<{ name: string; status: 'running' | 'completed' | 'failed' }> {
   return Array.from(output.toolCalls.values()).map(tc => ({
     name: tc.name,
-    status: tc.status as 'running' | 'completed' | 'failed',
+    status: tc.status,
   }));
 }
 

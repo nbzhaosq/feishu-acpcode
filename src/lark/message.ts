@@ -62,7 +62,6 @@ export async function updateCardMessage(
   try {
     const res = await ctx.client.im.message.patch({
       path: { message_id: messageId },
-      params: { receive_id_type: 'chat_id' },
       data: {
         content: cardJson,
       },

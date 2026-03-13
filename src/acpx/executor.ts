@@ -8,6 +8,7 @@ import {
   updateParsedOutput,
   getToolCallsArray,
   getLatestThinking,
+  type ParsedOutput,
 } from './parser.js';
 import { buildMessageCard, buildErrorCard } from '../lark/card.js';
 import { updateCardMessage, type MessageContext } from '../lark/message.js';
@@ -60,6 +61,7 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
   const initialCard = buildMessageCard({
     agent: session.agent,
     workspace: session.workspace,
+    status: 'thinking',
   });
 
   const createRes = await messageCtx.client.im.message.create({
