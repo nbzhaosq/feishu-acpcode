@@ -13,6 +13,7 @@ import {
 import { buildMessageCard, buildErrorCard } from '../lark/card.js';
 import { updateCardMessage, type MessageContext } from '../lark/message.js';
 import type { ChatSession } from '../types/session.js';
+import { updateChatSession } from './session.js';
 
 export interface ExecutorOptions {
   session: ChatSession;
@@ -26,38 +27,106 @@ interface RunningTask {
   process: ChildProcess;
   output: ParsedOutput;
   messageId: string;
-  lastUpdate: number;
+  lastCardUpdate: number;
+  lastActivity: number;
 }
 
 const runningTasks = new Map<string, RunningTask>();
 
-// 清理超时的任务
+// Cleanup timed-out tasks
 setInterval(() => {
   const now = Date.now();
-  const TIMEOUT = 5 * 60 * 1000; // 5分钟
+  const TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
   for (const [messageId, task] of runningTasks.entries()) {
-    if (now - task.lastUpdate > TIMEOUT) {
-      logger.warn(`任务超时，终止进程: ${messageId}`);
+    if (now - task.lastActivity > TIMEOUT) {
+      logger.warn(`Task timed out, terminating process: ${messageId}`);
       task.process.kill('SIGTERM');
       runningTasks.delete(messageId);
     }
   }
-}, 60 * 1000); // 每分钟检查一次
+}, 60 * 1000); // Check every minute
+
+/**
+ * Ensure an acpx session exists for the given workspace and agent.
+ * Returns the session ID if successful, null otherwise.
+ */
+async function ensureACPXSession(
+  acpxPath: string,
+  workspacePath: string,
+  agent: string
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    const args = [
+      '--cwd', workspacePath,
+      '--format', 'json',
+      agent,
+      'sessions',
+      'ensure',
+    ];
+
+    logger.info(`Ensuring acpx session: ${acpxPath} ${args.join(' ')}`);
+
+    const process = spawn(acpxPath, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    process.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    process.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    process.on('close', (code) => {
+      if (code !== 0) {
+        logger.error(`Failed to ensure session: ${stderr}`);
+        resolve(null);
+        return;
+      }
+
+      // Parse the session info from stdout
+      try {
+        const lines = stdout.trim().split('\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const parsed = JSON.parse(line);
+          if (parsed.acpxSessionId) {
+            logger.info(`Acpx session ensured: ${parsed.acpxSessionId}`);
+            resolve(parsed.acpxSessionId);
+            return;
+          }
+        }
+      } catch (e) {
+        logger.error('Failed to parse session response:', stdout);
+      }
+      resolve(null);
+    });
+
+    process.on('error', (err) => {
+      logger.error('Failed to ensure acpx session:', err);
+      resolve(null);
+    });
+  });
+}
 
 export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutput> {
   const { session, workspacePath, prompt, messageCtx, onUpdate } = options;
   const config = getConfig();
 
-  // 检查是否有正在运行的任务
+  // Check if there's already a running task
   const existingTask = runningTasks.get(messageCtx.chatId);
   if (existingTask) {
-    logger.warn('已有任务正在运行，终止旧任务');
+    logger.warn('Task already running, terminating old task');
     existingTask.process.kill('SIGTERM');
     runningTasks.delete(messageCtx.chatId);
   }
 
-  // 发送初始消息卡片
+  // Send initial message card
   const initialCard = buildMessageCard({
     agent: session.agent,
     workspace: session.workspace,
@@ -74,32 +143,35 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
   });
 
   if (createRes.code !== 0 || !createRes.data?.message_id) {
-    throw new Error('无法发送初始消息');
+    throw new Error('Failed to send initial message');
   }
 
   const messageId = createRes.data.message_id;
   let output = createParsedOutput();
 
-  // 构建 acpx 命令
   const acpxPath = config.acpx.path;
-  const args = [
-    'chat',
-    '--agent', session.agent,
-    '--workspace', workspacePath,
-    '--format', 'json',
-    '--prompt', prompt,
-  ];
 
-  // 如果有会话 ID，传递给 acpx
-  if (session.acpxSessionId) {
-    args.push('--session', session.acpxSessionId);
+  // Ensure acpx session exists
+  if (!session.acpxSessionId) {
+    const sessionId = await ensureACPXSession(acpxPath, workspacePath, session.agent);
+    if (sessionId) {
+      session.acpxSessionId = sessionId;
+      updateChatSession(messageCtx.chatId, { acpxSessionId: sessionId });
+    }
   }
 
-  logger.info(`执行 acpx: ${acpxPath} ${args.join(' ')}`);
+  // Build acpx command: acpx --cwd <workspace> --format json <agent> <prompt>
+  const args = [
+    '--cwd', workspacePath,
+    '--format', 'json',
+    session.agent,
+    prompt,
+  ];
 
-  // 启动进程
+  logger.info(`Executing acpx: ${acpxPath} ${args.join(' ')}`);
+
+  // Start process
   const process = spawn(acpxPath, args, {
-    cwd: workspacePath,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
@@ -107,47 +179,50 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
     process,
     output,
     messageId,
-    lastUpdate: Date.now(),
+    lastCardUpdate: 0,
+    lastActivity: Date.now(),
   };
   runningTasks.set(messageCtx.chatId, task);
 
-  // 处理输出
+  // Handle output
   return new Promise((resolve, reject) => {
     let buffer = '';
 
     process.stdout.on('data', (data) => {
       buffer += data.toString();
 
-      // 按行处理
+      // Process line by line
       const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // 保留不完整的行
+      buffer = lines.pop() || ''; // Keep incomplete line
 
       for (const line of lines) {
         const event = parseACPXLine(line);
         if (!event) continue;
 
-        logger.debug('收到 acpx 事件:', event.type);
+        logger.debug('Received acpx event:', event.method || 'response');
 
-        // 更新输出
+        // Update output
         output = updateParsedOutput(output, event);
 
-        // 更新任务状态
+        // Update task state
         task.output = output;
-        task.lastUpdate = Date.now();
+        task.lastActivity = Date.now();
 
-        // 回调
+        // Callback
         if (onUpdate) {
           onUpdate(output);
         }
 
-        // 更新消息卡片（节流：最多每 2 秒更新一次）
-        if (Date.now() - task.lastUpdate > 2000 || output.done) {
+        // Update message card (throttled: max every 2 seconds)
+        const now = Date.now();
+        if (now - task.lastCardUpdate > 2000 || output.done) {
+          task.lastCardUpdate = now;
           updateCard(messageCtx, messageId, session, output).catch(err => {
-            logger.error('更新消息卡片失败:', err);
+            logger.error('Failed to update message card:', err);
           });
         }
 
-        // 如果完成，解析结果
+        // If done, parse result
         if (output.done) {
           break;
         }
@@ -162,29 +237,29 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
       runningTasks.delete(messageCtx.chatId);
 
       if (code !== 0 && !output.done) {
-        output.error = output.error || `进程异常退出，退出码: ${code}`;
+        output.error = output.error || `Process exited with code: ${code}`;
         output.done = true;
       }
 
-      // 更新最终状态
+      // Update final state
       updateCard(messageCtx, messageId, session, output).then(() => {
         resolve(output);
       }).catch(err => {
-        logger.error('更新最终消息卡片失败:', err);
+        logger.error('Failed to update final message card:', err);
         resolve(output);
       });
     });
 
     process.on('error', (err) => {
       runningTasks.delete(messageCtx.chatId);
-      logger.error('acpx 进程错误:', err);
+      logger.error('acpx process error:', err);
       output.error = err.message;
       output.done = true;
 
       updateCard(messageCtx, messageId, session, output).then(() => {
         resolve(output);
       }).catch(updateErr => {
-        logger.error('更新错误消息卡片失败:', updateErr);
+        logger.error('Failed to update error message card:', updateErr);
         resolve(output);
       });
     });
