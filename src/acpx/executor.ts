@@ -236,8 +236,15 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
     process.on('close', (code) => {
       runningTasks.delete(messageCtx.chatId);
 
-      if (code !== 0 && !output.done) {
+      // Only treat as error if code is explicitly non-zero (not null/undefined)
+      // null means process was killed by signal, which may be intentional
+      if (typeof code === 'number' && code !== 0 && !output.done) {
         output.error = output.error || `Process exited with code: ${code}`;
+        output.done = true;
+      }
+
+      // Ensure done is set if not already
+      if (!output.done) {
         output.done = true;
       }
 
