@@ -7,7 +7,7 @@ import { logger } from './utils/logger.js';
 import { registerCommand } from './commands/router.js';
 import { sendTextMessage, type MessageContext } from './lark/message.js';
 import { getConnectionStatus, connect, disconnect } from './lark/client.js';
-import { shutdownExecutor } from './acp/executor.js';
+import { shutdownAllExecutors, closeAgentSession } from './agent/router.js';
 
 // Register Feishu-side commands (these are used when bot receives messages in Feishu)
 registerCommand('connect', async (ctx: MessageContext) => {
@@ -40,18 +40,17 @@ registerCommand('reconnect', async (ctx: MessageContext) => {
 
 registerCommand('clear', async (ctx: MessageContext) => {
   const { getChatState, closeChatSession, getChatSession } = await import('./acpx/session.js');
-  const { closeACPXSession } = await import('./acp/executor.js');
   const { getConfig } = await import('./config.js');
   const config = getConfig();
 
   const chatState = getChatState(ctx.chatId);
   if (chatState) {
-    // Close existing acpx session if any
+    // Close existing agent session if any
     const session = getChatSession(ctx.chatId, chatState.currentWorkspace);
     if (session) {
       const workspace = config.workspaces.find(w => w.name === session.workspace);
       if (workspace) {
-        await closeACPXSession(config.acpx.path, workspace.path, session.agent);
+        await closeAgentSession(session.agent, workspace.path);
       }
     }
     closeChatSession(ctx.chatId, chatState.currentWorkspace);
@@ -90,8 +89,8 @@ async function main(): Promise<void> {
       await disconnect();
     }
 
-    // Shutdown executor to clear intervals, cancel tasks, and close sessions
-    await shutdownExecutor();
+    // Shutdown all executors to clear intervals, cancel tasks, and close sessions
+    await shutdownAllExecutors();
 
     logger.info('Bot shutdown complete');
     process.exit(0);

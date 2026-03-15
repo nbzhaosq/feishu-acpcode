@@ -153,7 +153,7 @@ export async function connect(): Promise<void> {
 export async function disconnect(): Promise<void> {
   if (wsClient) {
     // Cancel all running agent tasks first
-    const { cancelAllTasks, closeAllACPXSessions } = await import('../acp/executor.js');
+    const { cancelAllTasks, closeAllAgentSessions } = await import('../agent/router.js');
     const cancelledCount = await cancelAllTasks();
     if (cancelledCount > 0) {
       logger.info(`Cancelled ${cancelledCount} running agent task(s)`);
@@ -164,8 +164,8 @@ export async function disconnect(): Promise<void> {
       });
     }
 
-    // Close all acpx sessions
-    await closeAllACPXSessions();
+    // Close all agent sessions
+    await closeAllAgentSessions();
 
     wsClient.close();
     wsClient = null;
@@ -198,7 +198,7 @@ export async function reconnect(): Promise<void> {
 
 export function getBotStatus(): BotStatus {
   const config = getConfig();
-  const { getRunningTaskCount } = require('../acpx/executor.js');
+  const { getRunningTaskCount } = require('../agent/router.js');
 
   return {
     connectionStatus: isConnected ? 'connected' : 'disconnected',
