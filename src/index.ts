@@ -39,9 +39,21 @@ registerCommand('reconnect', async (ctx: MessageContext) => {
 });
 
 registerCommand('clear', async (ctx: MessageContext) => {
-  const { getChatState, closeChatSession } = await import('./acpx/session.js');
+  const { getChatState, closeChatSession, getChatSession } = await import('./acpx/session.js');
+  const { closeACPXSession } = await import('./acpx/executor.js');
+  const { getConfig } = await import('./config.js');
+  const config = getConfig();
+
   const chatState = getChatState(ctx.chatId);
   if (chatState) {
+    // Close existing acpx session if any
+    const session = getChatSession(ctx.chatId, chatState.currentWorkspace);
+    if (session) {
+      const workspace = config.workspaces.find(w => w.name === session.workspace);
+      if (workspace) {
+        await closeACPXSession(config.acpx.path, workspace.path, session.agent);
+      }
+    }
     closeChatSession(ctx.chatId, chatState.currentWorkspace);
     await sendTextMessage(ctx, 'Session history cleared');
   } else {
@@ -78,8 +90,8 @@ async function main(): Promise<void> {
       await disconnect();
     }
 
-    // Shutdown executor to clear intervals and cancel tasks
-    shutdownExecutor();
+    // Shutdown executor to clear intervals, cancel tasks, and close sessions
+    await shutdownExecutor();
 
     logger.info('Bot shutdown complete');
     process.exit(0);

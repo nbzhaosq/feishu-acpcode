@@ -12,6 +12,18 @@ let isConnected = false;
 let connectionStartTime: number | null = null;
 let messageCount = 0;
 
+// Message deduplication - track processed message IDs
+const processedMessages = new Set<string>();
+const MESSAGE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Cleanup old message IDs periodically
+setInterval(() => {
+  // Keep only recent message IDs (prevent memory leak)
+  if (processedMessages.size > 1000) {
+    processedMessages.clear();
+  }
+}, MESSAGE_TTL);
+
 export function getLarkClient(): lark.Client {
   if (!client) {
     const config = getConfig();
@@ -53,7 +65,16 @@ export async function connect(): Promise<void> {
 
   const eventDispatcher = new lark.EventDispatcher({}).register({
     'im.message.receive_v1': async (data) => {
-    logger.debug('收到消息:', data.message.message_id);
+    const messageId = data.message.message_id;
+
+    // Skip if already processed (deduplication)
+    if (processedMessages.has(messageId)) {
+      logger.debug('Skipping duplicate message:', messageId);
+      return;
+    }
+    processedMessages.add(messageId);
+
+    logger.info('收到消息:', messageId);
     messageCount++;
 
     botEvents.emit('message', {
@@ -132,7 +153,7 @@ export async function connect(): Promise<void> {
 export async function disconnect(): Promise<void> {
   if (wsClient) {
     // Cancel all running agent tasks first
-    const { cancelAllTasks } = await import('../acpx/executor.js');
+    const { cancelAllTasks, closeAllACPXSessions } = await import('../acpx/executor.js');
     const cancelledCount = cancelAllTasks();
     if (cancelledCount > 0) {
       logger.info(`Cancelled ${cancelledCount} running agent task(s)`);
@@ -142,6 +163,9 @@ export async function disconnect(): Promise<void> {
         text: `Cancelled ${cancelledCount} running agent task(s)`,
       });
     }
+
+    // Close all acpx sessions
+    await closeAllACPXSessions();
 
     wsClient.close();
     wsClient = null;

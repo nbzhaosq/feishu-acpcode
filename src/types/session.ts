@@ -4,6 +4,7 @@ export interface ChatSession {
   workspace: string;
   agent: string;
   acpxSessionId?: string;
+  acpxPid?: number;  // PID of the running acpx process
   createdAt: Date;
   lastActiveAt: Date;
 }

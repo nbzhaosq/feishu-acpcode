@@ -1,8 +1,8 @@
 // src/commands/router.ts
 import type * as lark from '@larksuiteoapi/node-sdk';
 import { getConfig, getWorkspaceByName, getDefaultWorkspace } from '../config.js';
-import { getOrCreateChatSession, getChatState, updateChatSession, closeChatSession, getAllChatSessions } from '../acpx/session.js';
-import { executeACPX } from '../acpx/executor.js';
+import { getOrCreateChatSession, getChatState, updateChatSession, closeChatSession, getAllChatSessions, getChatSession } from '../acpx/session.js';
+import { executeACPX, closeACPXSession } from '../acpx/executor.js';
 import { buildHelpCard, buildStatusCard, buildErrorCard } from '../lark/card.js';
 import { sendCardMessage, sendTextMessage, extractTextContent, type MessageContext } from '../lark/message.js';
 import { logger } from '../utils/logger.js';
@@ -154,16 +154,33 @@ async function handleWorkspace(ctx: MessageContext, args: string[]): Promise<voi
 
 async function handleSession(ctx: MessageContext, args: string[]): Promise<void> {
   const subCmd = args[0]?.toLowerCase();
+  const config = getConfig();
 
   if (subCmd === 'new') {
     const chatState = getChatState(ctx.chatId);
     if (chatState) {
+      // Close existing acpx session if any
+      const session = getChatSession(ctx.chatId, chatState.currentWorkspace);
+      if (session) {
+        const workspace = config.workspaces.find(w => w.name === session.workspace);
+        if (workspace) {
+          await closeACPXSession(config.acpx.path, workspace.path, session.agent);
+        }
+      }
       closeChatSession(ctx.chatId, chatState.currentWorkspace);
     }
     await sendTextMessage(ctx, 'Created new session');
   } else if (subCmd === 'close') {
     const chatState = getChatState(ctx.chatId);
     if (chatState) {
+      // Close existing acpx session if any
+      const session = getChatSession(ctx.chatId, chatState.currentWorkspace);
+      if (session) {
+        const workspace = config.workspaces.find(w => w.name === session.workspace);
+        if (workspace) {
+          await closeACPXSession(config.acpx.path, workspace.path, session.agent);
+        }
+      }
       closeChatSession(ctx.chatId, chatState.currentWorkspace);
       await sendTextMessage(ctx, 'Current session closed');
     } else {

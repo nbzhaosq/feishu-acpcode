@@ -1,5 +1,5 @@
 // src/acpx/executor.ts
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import { getConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -13,7 +13,7 @@ import {
 import { buildMessageCard, buildErrorCard } from '../lark/card.js';
 import { updateCardMessage, type MessageContext } from '../lark/message.js';
 import type { ChatSession } from '../types/session.js';
-import { updateChatSession } from './session.js';
+import { updateChatSession, getOrCreateChatSession, getAllChatSessions } from './session.js';
 
 export interface ExecutorOptions {
   session: ChatSession;
@@ -29,21 +29,29 @@ interface RunningTask {
   messageId: string;
   lastCardUpdate: number;
   lastActivity: number;
+  sessionKey: string;  // chatId:workspace
 }
 
 const runningTasks = new Map<string, RunningTask>();
 
-// Track all spawned process PIDs for cleanup
-const spawnedPids = new Set<number>();
+// Track PIDs per session (sessionKey -> PID)
+const sessionPids = new Map<string, number>();
 
-// Cleanup timed-out tasks
+// Cleanup timed-out tasks (uses configured timeout, default 30 minutes)
+const DEFAULT_TASK_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 let cleanupInterval: NodeJS.Timeout | null = setInterval(() => {
   const now = Date.now();
-  const TIMEOUT = 5 * 60 * 1000; // 5 minutes
+  let timeout = DEFAULT_TASK_TIMEOUT;
+  try {
+    const config = getConfig();
+    timeout = config.acpx.timeout || DEFAULT_TASK_TIMEOUT;
+  } catch {
+    // Config not loaded yet, use default
+  }
 
   for (const [messageId, task] of runningTasks.entries()) {
-    if (now - task.lastActivity > TIMEOUT) {
-      logger.warn(`Task timed out, terminating process: ${messageId}`);
+    if (now - task.lastActivity > timeout) {
+      logger.warn(`Task timed out (no activity for ${timeout / 1000}s), terminating process: ${messageId}`);
       killProcessTree(task.process);
       runningTasks.delete(messageId);
     }
@@ -67,24 +75,95 @@ function killProcessTree(proc: ChildProcess): void {
 }
 
 /**
+ * Close an acpx session for a specific workspace and agent.
+ * Uses --cwd to identify which session to close.
+ */
+export async function closeACPXSession(
+  acpxPath: string,
+  workspacePath: string,
+  agent: string
+): Promise<void> {
+  return new Promise((resolve) => {
+    const args = [
+      '--cwd', workspacePath,
+      agent,
+      'sessions',
+      'close',
+    ];
+
+    logger.info(`Closing acpx session: ${acpxPath} ${args.join(' ')}`);
+
+    const proc = spawn(acpxPath, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 5000,
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        logger.info(`Acpx session closed for ${workspacePath}`);
+      } else {
+        logger.warn(`Failed to close acpx session (code ${code})`);
+      }
+      resolve();
+    });
+
+    proc.on('error', (err) => {
+      logger.error('Failed to close acpx session:', err);
+      resolve();
+    });
+
+    // Timeout after 5 seconds
+    setTimeout(() => {
+      proc.kill();
+      resolve();
+    }, 5000);
+  });
+}
+
+/**
+ * Close all acpx sessions for all active chats.
+ */
+export async function closeAllACPXSessions(): Promise<void> {
+  const config = getConfig();
+  const sessions = getAllChatSessions();
+  const acpxPath = config.acpx.path;
+
+  const closePromises: Promise<void>[] = [];
+
+  for (const session of sessions) {
+    const workspace = config.workspaces.find(w => w.name === session.workspace);
+    if (workspace) {
+      closePromises.push(
+        closeACPXSession(acpxPath, workspace.path, session.agent)
+      );
+    }
+  }
+
+  await Promise.all(closePromises);
+  logger.info(`Closed ${closePromises.length} acpx sessions`);
+}
+
+/**
  * Kill all tracked processes and acpx-related processes.
  */
-function killAllACPXProcesses(): void {
-  // Kill all tracked PIDs
-  for (const pid of spawnedPids) {
+async function killAllACPXProcesses(): Promise<void> {
+  // Kill all session PIDs
+  for (const [sessionKey, pid] of sessionPids.entries()) {
     try {
       process.kill(-pid, 'SIGKILL');
+      logger.debug(`Killed process ${pid} for session ${sessionKey}`);
     } catch {
       // Process might already be dead
     }
   }
-  spawnedPids.clear();
+  sessionPids.clear();
+
+  // Close all acpx sessions properly
+  await closeAllACPXSessions();
 
   // Use pkill to kill any remaining acpx-related processes
   // This handles processes spawned by acpx internally (like __queue-owner)
   try {
-    const { execSync } = require('child_process');
-    // Kill acpx and claude-agent-acp processes
     execSync('pkill -f "acpx.*__queue-owner" 2>/dev/null || true', { timeout: 1000 });
     execSync('pkill -f "claude-agent-acp" 2>/dev/null || true', { timeout: 1000 });
   } catch {
@@ -93,10 +172,10 @@ function killAllACPXProcesses(): void {
 }
 
 /**
- * Shutdown executor - clear intervals and cancel all tasks.
+ * Shutdown executor - clear intervals, cancel tasks, and close sessions.
  * Call this before process exit to ensure clean shutdown.
  */
-export function shutdownExecutor(): void {
+export async function shutdownExecutor(): Promise<void> {
   // Clear the cleanup interval
   if (cleanupInterval) {
     clearInterval(cleanupInterval);
@@ -104,8 +183,8 @@ export function shutdownExecutor(): void {
   }
   // Cancel any running tasks
   cancelAllTasks();
-  // Kill all acpx-related processes
-  killAllACPXProcesses();
+  // Kill all acpx-related processes and close sessions
+  await killAllACPXProcesses();
 }
 
 /**
@@ -179,7 +258,10 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
   const { session, workspacePath, prompt, messageCtx, onUpdate } = options;
   const config = getConfig();
 
-  // Check if there's already a running task
+  // Create session key for tracking
+  const sessionKey = `${messageCtx.chatId}:${session.workspace}`;
+
+  // Check if there's already a running task for this chat
   const existingTask = runningTasks.get(messageCtx.chatId);
   if (existingTask) {
     logger.warn('Task already running, terminating old task');
@@ -221,13 +303,25 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
     }
   }
 
-  // Build acpx command: acpx --cwd <workspace> --format json <agent> <prompt>
+  // Build acpx command with timeout and ttl from config
+  // Example: acpx --cwd /path --format json --timeout 300 --ttl 300 claude "prompt"
   const args = [
     '--cwd', workspacePath,
     '--format', 'json',
-    session.agent,
-    prompt,
   ];
+
+  // Add timeout from config (config is in ms, acpx expects seconds)
+  if (config.acpx.timeout) {
+    args.push('--timeout', String(Math.floor(config.acpx.timeout / 1000)));
+  }
+
+  // Add ttl from config (config is already in seconds)
+  if (config.acpx.ttl) {
+    args.push('--ttl', String(config.acpx.ttl));
+  }
+
+  // Add agent and prompt
+  args.push(session.agent, prompt);
 
   logger.info(`Executing acpx: ${acpxPath} ${args.join(' ')}`);
 
@@ -237,9 +331,10 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
     detached: true, // Create new process group for clean termination
   });
 
-  // Track PID for cleanup
+  // Track PID per session
   if (childProcess.pid) {
-    spawnedPids.add(childProcess.pid);
+    sessionPids.set(sessionKey, childProcess.pid);
+    updateChatSession(messageCtx.chatId, { acpxPid: childProcess.pid } as any);
   }
 
   const task: RunningTask = {
@@ -248,6 +343,7 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
     messageId,
     lastCardUpdate: 0,
     lastActivity: Date.now(),
+    sessionKey,
   };
   runningTasks.set(messageCtx.chatId, task);
 
@@ -302,9 +398,10 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
 
     childProcess.on('close', (code) => {
       runningTasks.delete(messageCtx.chatId);
-      // Remove PID from tracking
+      // Remove PID from session tracking
+      sessionPids.delete(sessionKey);
       if (childProcess.pid) {
-        spawnedPids.delete(childProcess.pid);
+        updateChatSession(messageCtx.chatId, { acpxPid: undefined } as any);
       }
 
       // Only treat as error if code is explicitly non-zero (not null/undefined)
@@ -330,6 +427,7 @@ export async function executeACPX(options: ExecutorOptions): Promise<ParsedOutpu
 
     childProcess.on('error', (err) => {
       runningTasks.delete(messageCtx.chatId);
+      sessionPids.delete(sessionKey);
       logger.error('acpx process error:', err);
       output.error = err.message;
       output.done = true;
@@ -381,6 +479,7 @@ export function cancelTask(chatId: string): boolean {
 
   killProcessTree(task.process);
   runningTasks.delete(chatId);
+  sessionPids.delete(task.sessionKey);
   return true;
 }
 
@@ -390,6 +489,7 @@ export function cancelAllTasks(): number {
     logger.info(`Cancelling task: ${chatId}`);
     killProcessTree(task.process);
     runningTasks.delete(chatId);
+    sessionPids.delete(task.sessionKey);
   }
   return count;
 }

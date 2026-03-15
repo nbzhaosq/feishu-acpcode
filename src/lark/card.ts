@@ -9,17 +9,7 @@ export interface CardOptions {
   error?: string;
 }
 
-interface CollapsibleElement {
-  tag: 'collapsible';
-  header: {
-    title: { tag: 'plain_text'; content: string };
-    template?: string;
-  };
-  collapsed?: boolean;
-  elements: Array<{ tag: string; content?: string }>;
-}
-
-type CardElement = { tag: string; content?: string } | CollapsibleElement;
+type CardElement = { tag: string; content?: string };
 
 function escapeMarkdown(text: string): string {
   return text.replace(/([*_`\[\]()#+\-.!])/g, '\\$1');
@@ -54,41 +44,21 @@ export function buildMessageCard(options: CardOptions): string {
     content: `**状态:** ${statusIcon}`,
   });
 
-  // 思考内容 - 可折叠
+  // 思考内容
   if (options.thinking) {
     elements.push({ tag: 'hr' });
     elements.push({
-      tag: 'collapsible',
-      header: {
-        title: { tag: 'plain_text', content: '🧠 思考过程' },
-        template: 'grey',
-      },
-      collapsed: true,
-      elements: [
-        {
-          tag: 'markdown',
-          content: escapeMarkdown(options.thinking.slice(0, 500)),
-        },
-      ],
+      tag: 'markdown',
+      content: `**🧠 思考过程**\n${escapeMarkdown(options.thinking.slice(0, 500))}`,
     });
   }
 
-  // 工具调用 - 可折叠
+  // 工具调用
   if (options.toolCalls && options.toolCalls.length > 0) {
     elements.push({ tag: 'hr' });
     elements.push({
-      tag: 'collapsible',
-      header: {
-        title: { tag: 'plain_text', content: '🔧 工具调用' },
-        template: 'grey',
-      },
-      collapsed: true,
-      elements: [
-        {
-          tag: 'markdown',
-          content: formatToolCalls(options.toolCalls),
-        },
-      ],
+      tag: 'markdown',
+      content: `**🔧 工具调用**\n${formatToolCalls(options.toolCalls)}`,
     });
   }
 

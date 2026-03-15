@@ -52,7 +52,7 @@ export function getOrCreateChatSession(
 
 export function updateChatSession(
   chatId: string,
-  updates: { workspace?: string; agent?: string; acpxSessionId?: string }
+  updates: { workspace?: string; agent?: string; acpxSessionId?: string; acpxPid?: number }
 ): ChatSession | null {
   const chatState = globalState.chatStates.get(chatId);
   if (!chatState) return null;
@@ -69,7 +69,8 @@ export function updateChatSession(
 
   if (session) {
     if (updates.agent) session.agent = updates.agent;
-    if (updates.acpxSessionId) session.acpxSessionId = updates.acpxSessionId;
+    if (updates.acpxSessionId !== undefined) session.acpxSessionId = updates.acpxSessionId;
+    if (updates.acpxPid !== undefined) session.acpxPid = updates.acpxPid;
     session.lastActiveAt = new Date();
   }
 
@@ -88,11 +89,24 @@ export function getAllChatSessions(): ChatSession[] {
   return Array.from(globalState.sessions.values());
 }
 
+export function getChatSession(chatId: string, workspace?: string): ChatSession | undefined {
+  const chatState = globalState.chatStates.get(chatId);
+  if (!chatState) return undefined;
+
+  const ws = workspace || chatState.currentWorkspace;
+  const key = createChatSessionKey(chatId, ws);
+  return globalState.sessions.get(key);
+}
+
 export function closeChatSession(chatId: string, workspace?: string): boolean {
   const chatState = globalState.chatStates.get(chatId);
   if (!chatState) return false;
 
   const ws = workspace || chatState.currentWorkspace;
   const key = createChatSessionKey(chatId, ws);
+  const session = globalState.sessions.get(key);
+
+  // Note: We don't close the acpx session here, just clear the reference
+  // The acpx session should be closed via closeACPXSession in executor.ts
   return globalState.sessions.delete(key);
 }

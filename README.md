@@ -9,6 +9,7 @@ A Feishu bot that brings AI coding assistants (Claude Code, OpenCode, Codex) dir
 - **Multi-Agent Support**: Switch between Claude Code, OpenCode, and Codex
 - **Session Persistence**: Maintains conversation context across messages
 - **Workspace Management**: Configure multiple project workspaces
+- **Message Deduplication**: Handles duplicate messages from Feishu WebSocket
 
 ## Quick Start
 
@@ -24,7 +25,7 @@ Copy `config.example.json` to `config.json` and fill in your Feishu app credenti
 
 ```json
 {
-  "Lark": {
+  "lark": {
     "appId": "your-app-id",
     "appSecret": "your-app-secret"
   },
@@ -37,6 +38,11 @@ Copy `config.example.json` to `config.json` and fill in your Feishu app credenti
   "agents": {
     "default": "claude",
     "available": ["claude", "opencode", "codex"]
+  },
+  "acpx": {
+    "path": "acpx",
+    "timeout": 300000,
+    "ttl": 300
   }
 }
 ```
@@ -63,6 +69,15 @@ npm install -g feishu-acpcode
 # Run from anywhere
 acpcode
 ```
+
+## Configuration Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `acpx.path` | Path to acpx executable | `"acpx"` |
+| `acpx.timeout` | Max wait time for agent response (ms) | `300000` (5 min) |
+| `acpx.ttl` | Queue owner idle TTL (seconds) | `300` (5 min) |
+| `acpx.throttleInterval` | Card update throttle (ms) | `1500` |
 
 ## TUI Dashboard
 
@@ -102,6 +117,7 @@ The bot starts with an interactive terminal dashboard:
 | `/agent <name>` | Switch agent |
 | `/workspace <name>` | Switch workspace |
 | `/config` | Show configuration |
+| `/logs` | Toggle verbose logging |
 | `/help` | Show help |
 | `/exit` | Exit application |
 
@@ -114,6 +130,13 @@ The bot starts with an interactive terminal dashboard:
 | `/agent <name>` | Switch agent |
 | `/workspace <name>` | Switch workspace |
 | `/clear` | Clear conversation history |
+
+## Session Management
+
+- Sessions are automatically tied to workspace directories
+- acpx `sessions ensure` creates/reuses sessions
+- On disconnect, sessions are properly closed via `sessions close`
+- Use `/clear` to start a fresh session
 
 ## Requirements
 

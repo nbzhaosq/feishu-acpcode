@@ -9,7 +9,8 @@ This bot connects to Feishu via WebSocket and responds to user messages by execu
 - **TUI Dashboard**: Interactive terminal interface for managing the bot
 - **Multi-agent Support**: Claude Code, OpenCode, Codex via acpx
 - **Real-time Streaming**: Progress updates and thinking visible in Feishu message cards
-- **Session Management**: Persistent conversation context per chat
+- **Session Management**: Persistent conversation context per chat (tied to workspace path)
+- **Message Deduplication**: Prevents duplicate message processing from Feishu WebSocket
 
 ## Architecture
 
@@ -25,12 +26,12 @@ src/
 │   └── hooks/
 │       └── useBotManager.ts    # Bot state management
 ├── lark/
-│   ├── client.ts         # Feishu WebSocket connection
+│   ├── client.ts         # Feishu WebSocket connection, message deduplication
 │   ├── events.ts         # Event emitter for TUI
 │   ├── message.ts        # Message sending utilities
 │   └── card.ts           # Feishu message card builder
 ├── acpx/
-│   ├── executor.ts       # acpx process management
+│   ├── executor.ts       # acpx process management, session handling, timeout/ttl
 │   ├── parser.ts         # ACP JSON-RPC message parser
 │   └── session.ts        # Chat session state
 ├── commands/
@@ -65,10 +66,21 @@ Create `config.json` from `config.example.json`:
   },
   "acpx": {
     "path": "acpx",
-    "timeout": 300000
+    "timeout": 300000,
+    "ttl": 300,
+    "throttleInterval": 1500
   }
 }
 ```
+
+### Configuration Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `acpx.path` | Path to acpx executable | `"acpx"` |
+| `acpx.timeout` | Max time to wait for agent response (ms) | `300000` (5 min) |
+| `acpx.ttl` | Queue owner idle TTL before shutdown (seconds) | `300` (5 min) |
+| `acpx.throttleInterval` | Card update throttle interval (ms) | `1500` |
 
 ## Running the Bot
 
@@ -109,7 +121,34 @@ node bin/acpcode.js
 | `/status` | Show bot status |
 | `/agent <name>` | Switch agent for this chat |
 | `/workspace <name>` | Switch workspace for this chat |
+| `/session new` | Create new session (closes acpx session) |
+| `/session close` | Close current session |
 | `/clear` | Clear conversation history |
+
+## Session Management
+
+- Sessions are automatically tied to the workspace directory path
+- `acpx sessions ensure` creates/reuses a session for the workspace
+- On disconnect/exit, `acpx sessions close` is called to properly close sessions
+- Use `/session new` or `/clear` to start fresh (closes existing acpx session)
+
+## Message Flow
+
+1. User sends message to bot in Feishu
+2. Bot receives via WebSocket, deduplicates by message_id
+3. Bot creates/updates session for the chat+workspace
+4. Bot spawns acpx process with `--timeout` and `--ttl` from config
+5. acpx streams ACP JSON-RPC messages
+6. Parser extracts thinking, tool calls, response text
+7. Bot updates Feishu message card with progress (throttled)
+8. On completion, final response is displayed
+
+## Cleanup & Timeout
+
+- Internal cleanup: Tasks with no activity for 30 minutes are terminated
+- acpx timeout: Passed via `--timeout` flag (from config.acpx.timeout)
+- acpx ttl: Passed via `--ttl` flag (from config.acpx.ttl)
+- On disconnect/exit: All acpx sessions are closed via `sessions close`
 
 ## Development
 
@@ -133,22 +172,12 @@ npm run typecheck
 - `zod` - Configuration validation
 - `tsx` - TypeScript execution
 
-## Agent Task Management
+## Requirements
 
-When you run `/stop`, the bot will:
-1. Cancel all running agent (acpx) processes
-2. Disconnect from Feishu WebSocket
+- Node.js 18+
+- [acpx](https://github.com/openclaw/acpx) installed globally
+- Feishu App with WebSocket enabled
 
-You can also use `/cancel` to stop all running agents without disconnecting.
+## License
 
-The StatusPanel shows running task count when agents are active.
-
-## Message Flow
-
-1. User sends message to bot in Feishu
-2. Bot receives via WebSocket, creates/updates session
-3. Bot spawns acpx process with prompt
-4. acpx streams ACP JSON-RPC messages
-5. Parser extracts thinking, tool calls, response text
-6. Bot updates Feishu message card with progress
-7. On completion, final response is displayed
+MIT
