@@ -494,6 +494,18 @@ export function cancelAllTasks(): number {
   return count;
 }
 
+// Async version for use with ACP SDK
+export async function cancelAllTasksAsync(): Promise<number> {
+  const count = runningTasks.size;
+  for (const [chatId, task] of runningTasks.entries()) {
+    logger.info(`Cancelling task: ${chatId}`);
+    killProcessTree(task.process);
+    runningTasks.delete(chatId);
+    sessionPids.delete(task.sessionKey);
+  }
+  return count;
+}
+
 export function getRunningTask(chatId: string): RunningTask | undefined {
   return runningTasks.get(chatId);
 }

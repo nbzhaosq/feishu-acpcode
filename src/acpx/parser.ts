@@ -40,9 +40,17 @@ export interface ACPMessage {
   };
 }
 
+export interface ToolCallInfo {
+  id?: string;
+  name: string;
+  status: 'running' | 'completed' | 'failed';
+  input?: unknown;
+  output?: string;
+}
+
 export interface ParsedOutput {
   thinking: string[];
-  toolCalls: Map<string, { name: string; status: 'running' | 'completed' | 'failed'; output?: string }>;
+  toolCalls: Map<string, ToolCallInfo>;
   text: string;
   done: boolean;
   error?: string;

@@ -7,7 +7,7 @@ import { logger } from './utils/logger.js';
 import { registerCommand } from './commands/router.js';
 import { sendTextMessage, type MessageContext } from './lark/message.js';
 import { getConnectionStatus, connect, disconnect } from './lark/client.js';
-import { shutdownExecutor } from './acpx/executor.js';
+import { shutdownExecutor } from './acp/executor.js';
 
 // Register Feishu-side commands (these are used when bot receives messages in Feishu)
 registerCommand('connect', async (ctx: MessageContext) => {
@@ -40,7 +40,7 @@ registerCommand('reconnect', async (ctx: MessageContext) => {
 
 registerCommand('clear', async (ctx: MessageContext) => {
   const { getChatState, closeChatSession, getChatSession } = await import('./acpx/session.js');
-  const { closeACPXSession } = await import('./acpx/executor.js');
+  const { closeACPXSession } = await import('./acp/executor.js');
   const { getConfig } = await import('./config.js');
   const config = getConfig();
 

@@ -153,8 +153,8 @@ export async function connect(): Promise<void> {
 export async function disconnect(): Promise<void> {
   if (wsClient) {
     // Cancel all running agent tasks first
-    const { cancelAllTasks, closeAllACPXSessions } = await import('../acpx/executor.js');
-    const cancelledCount = cancelAllTasks();
+    const { cancelAllTasks, closeAllACPXSessions } = await import('../acp/executor.js');
+    const cancelledCount = await cancelAllTasks();
     if (cancelledCount > 0) {
       logger.info(`Cancelled ${cancelledCount} running agent task(s)`);
       botEvents.emit('message', {

@@ -2,7 +2,8 @@
 import type * as lark from '@larksuiteoapi/node-sdk';
 import { getConfig, getWorkspaceByName, getDefaultWorkspace } from '../config.js';
 import { getOrCreateChatSession, getChatState, updateChatSession, closeChatSession, getAllChatSessions, getChatSession } from '../acpx/session.js';
-import { executeACPX, closeACPXSession } from '../acpx/executor.js';
+// Use ACP SDK executor instead of acpx CLI executor
+import { executeACP, closeACPXSession } from '../acp/executor.js';
 import { buildHelpCard, buildStatusCard, buildErrorCard } from '../lark/card.js';
 import { sendCardMessage, sendTextMessage, extractTextContent, type MessageContext } from '../lark/message.js';
 import { logger } from '../utils/logger.js';
@@ -71,7 +72,7 @@ async function handlePrompt(
       return;
     }
 
-    await executeACPX({
+    await executeACP({
       session,
       workspacePath: workspace.path,
       prompt,
