@@ -7,8 +7,8 @@ import {
 } from '../../lark/client.js';
 import { botEvents, type LogMessage, type BotStatus } from '../../lark/events.js';
 import { getConfig, getDefaultWorkspace } from '../../config.js';
-import { getAllChatSessions } from '../../acpx/session.js';
-import { getRunningTaskCount, cancelAllTasks } from '../../acpx/executor.js';
+import { getAllChatSessions } from '../../session/index.js';
+import { getRunningTaskCount, cancelAllTasks } from '../../agent/router.js';
 
 const MAX_MESSAGES = 100;
 
@@ -98,8 +98,8 @@ export function useBotManager() {
     await disconnect();
   }, []);
 
-  const handleCancelAllTasks = useCallback(() => {
-    const count = cancelAllTasks();
+  const handleCancelAllTasks = useCallback(async () => {
+    const count = await cancelAllTasks();
     if (count > 0) {
       addLocalMessage('system', `Cancelled ${count} running task(s)`);
     }

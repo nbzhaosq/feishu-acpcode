@@ -43,6 +43,10 @@ Copy `config.example.json` to `config.json` and fill in your Feishu app credenti
     "path": "acpx",
     "timeout": 300000,
     "ttl": 300
+  },
+  "api": {
+    "baseUrl": "https://api.anthropic.com",
+    "apiKey": "sk-ant-your-key"
   }
 }
 ```
@@ -74,10 +78,120 @@ acpcode
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `acpx.path` | Path to acpx executable | `"acpx"` |
-| `acpx.timeout` | Max wait time for agent response (ms) | `300000` (5 min) |
-| `acpx.ttl` | Queue owner idle TTL (seconds) | `300` (5 min) |
-| `acpx.throttleInterval` | Card update throttle (ms) | `1500` |
+| `agent.timeout` | Max wait time for agent response (ms) | `300000` (5 min) |
+| `agent.throttleInterval` | Card update throttle (ms) | `1500` |
+| `api.baseUrl` | Custom API base URL (for proxies) | Anthropic API |
+| `api.apiKey` | Custom API key | `ANTHROPIC_API_KEY` env |
+| `agentOptions.mcpServers` | MCP server configurations | `{}` |
+| `agentOptions.allowedTools` | Tools the agent can use | `[]` |
+| `agentOptions.enableSkills` | Enable Skills capability | `true` |
+| `agentOptions.settingSources` | Sources for loading Skills | `["user", "project"]` |
+| `logging.level` | Log level (debug, info, warn, error) | `info` |
+| `logging.file.enabled` | Enable file logging | `true` |
+| `logging.file.path` | Log file path | `~/.claude/logs/feishu-acpcode.log` |
+
+### Agent Configuration
+
+Configure agent execution settings:
+
+```json
+{
+  "agent": {
+    "timeout": 300000,
+    "throttleInterval": 1500
+  }
+}
+```
+
+- `timeout`: Maximum time to wait for agent response in milliseconds
+- `throttleInterval`: Throttle interval for message card updates in milliseconds
+
+### API Configuration
+
+Configure a custom API endpoint (e.g., for proxy servers or alternative providers):
+
+```json
+{
+  "api": {
+    "baseUrl": "https://your-proxy.example.com",
+    "apiKey": "your-api-key"
+  }
+}
+```
+
+- `baseUrl`: Custom API endpoint URL (optional)
+- `apiKey`: API key for authentication (optional, falls back to `ANTHROPIC_API_KEY` environment variable)
+
+### MCP Servers Configuration
+
+Configure MCP (Model Context Protocol) servers to extend Claude's capabilities:
+
+```json
+{
+  "agentOptions": {
+    "mcpServers": {
+      "filesystem": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/directory"]
+      },
+      "postgres": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:pass@localhost/db"]
+      },
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": {
+          "GITHUB_TOKEN": "your-github-token"
+        }
+      }
+    },
+    "allowedTools": [
+      "mcp__filesystem__*",
+      "mcp__postgres__query",
+      "Skill"
+    ]
+  }
+}
+```
+
+| Option | Description |
+|--------|-------------|
+| `mcpServers` | Map of MCP server configurations |
+| `mcpServers.<name>.command` | Command to run the MCP server |
+| `mcpServers.<name>.args` | Arguments passed to the server |
+| `mcpServers.<name>.env` | Environment variables for the server |
+| `allowedTools` | Tools the agent is allowed to use (use `mcp__servername__*` for all tools from a server) |
+
+### Skills Configuration
+
+Skills are loaded from `.claude/skills/` directories:
+
+```json
+{
+  "agentOptions": {
+    "enableSkills": true,
+    "settingSources": ["user", "project"],
+    "allowedTools": ["Skill"]
+  }
+}
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `enableSkills` | Enable Skills capability | `true` |
+| `settingSources` | Where to load Skills from (`user` = `~/.claude/`, `project` = `.claude/`) | `["user", "project"]` |
+
+Skills directory structure:
+```
+project/
+├── .claude/
+│   └── skills/
+│       ├── my-skill/
+│       │   └── SKILL.md
+│       └── another-skill/
+│           └── SKILL.md
+```
 
 ## TUI Dashboard
 

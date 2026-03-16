@@ -3,8 +3,15 @@ export interface ChatSession {
   chatId: string;
   workspace: string;
   agent: string;
+  // Unified session ID (used by both Claude SDK and ACP SDK)
+  sessionId?: string;
+  // Process PID for ACP-based agents (OpenCode, Codex)
+  processPid?: number;
+  // Legacy fields kept for backward compatibility
+  /** @deprecated Use sessionId instead */
   acpxSessionId?: string;
-  acpxPid?: number;  // PID of the running acpx process
+  /** @deprecated Use processPid instead */
+  acpxPid?: number;
   createdAt: Date;
   lastActiveAt: Date;
 }

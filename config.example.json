@@ -18,10 +18,34 @@
     "default": "claude",
     "available": ["claude", "opencode", "codex"]
   },
-  "acpx": {
-    "path": "acpx",
+  "agent": {
     "timeout": 300000,
-    "ttl": 300,
     "throttleInterval": 1500
+  },
+  "api": {
+    "baseUrl": "https://api.anthropic.com",
+    "apiKey": "sk-ant-xxxxxxxx"
+  },
+  "agentOptions": {
+    "mcpServers": {
+      "filesystem": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/directory"]
+      }
+    },
+    "allowedTools": [
+      "mcp__filesystem__*",
+      "Skill"
+    ],
+    "settingSources": ["user", "project"],
+    "enableSkills": true
+  },
+  "logging": {
+    "level": "info",
+    "file": {
+      "enabled": true,
+      "path": "~/.claude/logs/feishu-acpcode.log",
+      "maxSize": 10485760
+    }
   }
 }

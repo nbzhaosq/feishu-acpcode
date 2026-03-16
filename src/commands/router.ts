@@ -1,8 +1,9 @@
 // src/commands/router.ts
 import type * as lark from '@larksuiteoapi/node-sdk';
 import { getConfig, getWorkspaceByName, getDefaultWorkspace } from '../config.js';
-import { getOrCreateChatSession, getChatState, updateChatSession, closeChatSession, getAllChatSessions, getChatSession } from '../acpx/session.js';
-import { executeACPX, closeACPXSession } from '../acpx/executor.js';
+import { getOrCreateChatSession, getChatState, updateChatSession, closeChatSession, getAllChatSessions, getChatSession } from '../session/index.js';
+// Use unified agent router instead of direct executor imports
+import { executeAgent, closeAgentSession } from '../agent/router.js';
 import { buildHelpCard, buildStatusCard, buildErrorCard } from '../lark/card.js';
 import { sendCardMessage, sendTextMessage, extractTextContent, type MessageContext } from '../lark/message.js';
 import { logger } from '../utils/logger.js';
@@ -71,7 +72,8 @@ async function handlePrompt(
       return;
     }
 
-    await executeACPX({
+    // Use unified agent router instead of direct executor
+    await executeAgent({
       session,
       workspacePath: workspace.path,
       prompt,
@@ -159,12 +161,12 @@ async function handleSession(ctx: MessageContext, args: string[]): Promise<void>
   if (subCmd === 'new') {
     const chatState = getChatState(ctx.chatId);
     if (chatState) {
-      // Close existing acpx session if any
+      // Close existing agent session if any
       const session = getChatSession(ctx.chatId, chatState.currentWorkspace);
       if (session) {
         const workspace = config.workspaces.find(w => w.name === session.workspace);
         if (workspace) {
-          await closeACPXSession(config.acpx.path, workspace.path, session.agent);
+          await closeAgentSession(session.agent, workspace.path);
         }
       }
       closeChatSession(ctx.chatId, chatState.currentWorkspace);
@@ -173,12 +175,12 @@ async function handleSession(ctx: MessageContext, args: string[]): Promise<void>
   } else if (subCmd === 'close') {
     const chatState = getChatState(ctx.chatId);
     if (chatState) {
-      // Close existing acpx session if any
+      // Close existing agent session if any
       const session = getChatSession(ctx.chatId, chatState.currentWorkspace);
       if (session) {
         const workspace = config.workspaces.find(w => w.name === session.workspace);
         if (workspace) {
-          await closeACPXSession(config.acpx.path, workspace.path, session.agent);
+          await closeAgentSession(session.agent, workspace.path);
         }
       }
       closeChatSession(ctx.chatId, chatState.currentWorkspace);
