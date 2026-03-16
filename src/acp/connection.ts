@@ -233,31 +233,34 @@ export class ACPConnectionManager {
   private spawnAgent(config: ACPAgentConfig): ChildProcess {
     const args = config.args || [];
 
-    // For different agents, we might need different spawn strategies
-    // acpx format: acpx --cwd <path> <agent>
-    // claude-code format: claude --agent
-
-    let command = config.agentPath;
-    let commandArgs = [...args];
-
-    // If using acpx, the command structure is different
-    if (config.agentPath === 'acpx' || config.agentPath.endsWith('/acpx')) {
-      commandArgs = ['--cwd', config.cwd, config.agentName, ...args];
-    } else if (config.agentName === 'claude') {
-      // Direct claude-code invocation
-      commandArgs = ['--cwd', config.cwd, ...args];
-    }
+    // Use agentName as the command (claude, opencode, codex)
+    const command = config.agentName;
+    const commandArgs = ['--cwd', config.cwd, ...args];
 
     logger.info(`[ACP] Spawning agent: ${command} ${commandArgs.join(' ')}`);
+
+    // Build environment with API configuration
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      // Enable ACP mode for claude-code
+      CLAUDE_CODE_ACP: '1',
+    };
+
+    // Pass API configuration as environment variables
+    if (config.api?.baseUrl) {
+      env.ANTHROPIC_BASE_URL = config.api.baseUrl;
+      logger.info(`[ACP] Using custom API base URL: ${config.api.baseUrl}`);
+    }
+
+    if (config.api?.apiKey) {
+      env.ANTHROPIC_API_KEY = config.api.apiKey;
+      logger.info('[ACP] Using custom API key from config');
+    }
 
     const proc = spawn(command, commandArgs, {
       cwd: config.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        // Enable ACP mode for claude-code
-        CLAUDE_CODE_ACP: '1',
-      },
+      env,
     });
 
     // Log stderr for debugging

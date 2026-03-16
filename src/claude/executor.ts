@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 import { buildMessageCard } from '../lark/card.js';
 import { updateCardMessage, type MessageContext } from '../lark/message.js';
 import type { ChatSession } from '../types/session.js';
-import type { ParsedOutput, ToolCallInfo } from '../acpx/parser.js';
+import type { ParsedOutput, ToolCallInfo } from '../types/agent.js';
 import { botEvents } from '../lark/events.js';
 import {
   getOrCreateSession,
@@ -27,7 +27,7 @@ let cleanupInterval: NodeJS.Timeout | null = setInterval(() => {
   let timeout = DEFAULT_TASK_TIMEOUT;
   try {
     const config = getConfig();
-    timeout = config.acpx.timeout || DEFAULT_TASK_TIMEOUT;
+    timeout = config.agent?.timeout || DEFAULT_TASK_TIMEOUT;
   } catch {
     // Config not loaded yet
   }
@@ -107,18 +107,58 @@ export async function executeClaude(options: ClaudeExecutorOptions): Promise<Par
   runningTasks.set(messageCtx.chatId, task);
 
   try {
-    // Query options - use default Claude Code configuration
-    // Don't override env to let SDK use existing ~/.claude/ config
+    // Build environment with API configuration
+    const env: Record<string, string | undefined> = { ...process.env };
+
+    // Pass API configuration from config if provided
+    if (config.api?.baseUrl) {
+      env.ANTHROPIC_BASE_URL = config.api.baseUrl;
+      logger.info(`[Claude] Using custom API base URL: ${config.api.baseUrl}`);
+    }
+
+    if (config.api?.apiKey) {
+      env.ANTHROPIC_API_KEY = config.api.apiKey;
+      logger.info('[Claude] Using custom API key from config');
+    }
+
+    // Query options
     const queryOptions: Parameters<typeof query>[0]['options'] = {
       cwd: workspacePath,
       executable: 'node',
       tools: ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep', 'WebSearch', 'WebFetch'],
       permissionMode: 'acceptEdits',
+      // Pass environment variables (includes API config)
+      env,
       // Capture stderr for debugging
       stderr: (data: string) => {
         logger.error(`[Claude SDK stderr] ${data.trim()}`);
       },
     };
+
+    // Configure MCP servers if provided
+    if (config.agentOptions?.mcpServers && Object.keys(config.agentOptions.mcpServers).length > 0) {
+      queryOptions.mcpServers = config.agentOptions.mcpServers;
+      logger.info(`[Claude] Configured MCP servers: ${Object.keys(config.agentOptions.mcpServers).join(', ')}`);
+    }
+
+    // Configure allowed tools (including MCP tools and Skills)
+    const allowedTools: string[] = [...(config.agentOptions?.allowedTools || [])];
+
+    // Add Skill tool if skills are enabled
+    if (config.agentOptions?.enableSkills !== false) {
+      allowedTools.push('Skill');
+    }
+
+    if (allowedTools.length > 0) {
+      queryOptions.allowedTools = allowedTools;
+      logger.debug(`[Claude] Allowed tools: ${allowedTools.join(', ')}`);
+    }
+
+    // Configure setting sources for Skills loading
+    if (config.agentOptions?.settingSources) {
+      queryOptions.settingSources = config.agentOptions.settingSources;
+      logger.debug(`[Claude] Setting sources: ${config.agentOptions.settingSources.join(', ')}`);
+    }
 
     // Resume session if exists
     if (claudeSession.sessionId) {

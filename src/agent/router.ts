@@ -1,7 +1,7 @@
 // src/agent/router.ts
 import { logger } from '../utils/logger.js';
 import type { ChatSession } from '../types/session.js';
-import type { ParsedOutput, ToolCallInfo } from '../acpx/parser.js';
+import type { ParsedOutput, ToolCallInfo } from '../types/agent.js';
 import type { MessageContext } from '../lark/message.js';
 import {
   executeClaude,
@@ -14,8 +14,8 @@ import {
 } from '../claude/executor.js';
 import {
   executeACP,
-  closeACPXSession,
-  closeAllACPXSessions,
+  closeACPSession,
+  closeAllACPSessions,
   cancelTask as cancelACPTask,
   cancelAllTasks as cancelAllACPTasks,
   getRunningTaskCount as getACPTaskCount,
@@ -91,8 +91,7 @@ export async function closeAgentSession(
   if (agent.toLowerCase() === 'claude') {
     await closeClaudeSession(workspacePath, agent);
   } else {
-    const config = (await import('../config.js')).getConfig();
-    await closeACPXSession(config.acpx.path, workspacePath, agent);
+    await closeACPSession(workspacePath, agent);
   }
 }
 
@@ -102,7 +101,7 @@ export async function closeAgentSession(
 export async function closeAllAgentSessions(): Promise<void> {
   await Promise.all([
     closeAllClaudeSessions(),
-    closeAllACPXSessions(),
+    closeAllACPSessions(),
   ]);
   logger.info('[AgentRouter] All sessions closed');
 }
@@ -126,4 +125,4 @@ export async function shutdownAllExecutors(): Promise<void> {
 }
 
 // Re-export types
-export type { ParsedOutput, ToolCallInfo } from '../acpx/parser.js';
+export type { ParsedOutput, ToolCallInfo } from '../types/agent.js';

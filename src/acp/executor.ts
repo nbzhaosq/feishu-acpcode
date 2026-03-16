@@ -7,7 +7,7 @@ import { buildMessageCard } from '../lark/card.js';
 import { updateCardMessage, type MessageContext } from '../lark/message.js';
 import type { ChatSession } from '../types/session.js';
 import type { ACPSession, SessionUpdateCallback } from './types.js';
-import type { ParsedOutput, ToolCallInfo } from '../acpx/parser.js';
+import type { ParsedOutput, ToolCallInfo } from '../types/agent.js';
 import { botEvents } from '../lark/events.js';
 
 /**
@@ -41,7 +41,7 @@ let cleanupInterval: NodeJS.Timeout | null = setInterval(() => {
   let timeout = DEFAULT_TASK_TIMEOUT;
   try {
     const config = getConfig();
-    timeout = config.acpx.timeout || DEFAULT_TASK_TIMEOUT;
+    timeout = config.agent?.timeout || DEFAULT_TASK_TIMEOUT;
   } catch {
     // Config not loaded yet
   }
@@ -255,10 +255,10 @@ export async function executeACP(options: ACPExecutorOptions): Promise<ParsedOut
     // Get or create ACP session
     const acpSession = await manager.createSession(
       {
-        agentPath: config.acpx.path,
         cwd: workspacePath,
         agentName: session.agent,
-        timeout: config.acpx.timeout,
+        timeout: config.agent?.timeout,
+        api: config.api ? { baseUrl: config.api.baseUrl, apiKey: config.api.apiKey } : undefined,
       },
       handleSessionUpdate
     );
@@ -389,8 +389,7 @@ export function getAllRunningTasks(): Map<string, RunningTask> {
 /**
  * Close ACP session for a workspace
  */
-export async function closeACPXSession(
-  _acpxPath: string,
+export async function closeACPSession(
   workspacePath: string,
   agent: string
 ): Promise<void> {
@@ -405,7 +404,7 @@ export async function closeACPXSession(
 /**
  * Close all ACP sessions
  */
-export async function closeAllACPXSessions(): Promise<void> {
+export async function closeAllACPSessions(): Promise<void> {
   await shutdownACPManager();
 }
 

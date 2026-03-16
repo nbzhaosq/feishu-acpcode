@@ -1,7 +1,7 @@
 // src/commands/router.ts
 import type * as lark from '@larksuiteoapi/node-sdk';
 import { getConfig, getWorkspaceByName, getDefaultWorkspace } from '../config.js';
-import { getOrCreateChatSession, getChatState, updateChatSession, closeChatSession, getAllChatSessions, getChatSession } from '../acpx/session.js';
+import { getOrCreateChatSession, getChatState, updateChatSession, closeChatSession, getAllChatSessions, getChatSession } from '../session/index.js';
 // Use unified agent router instead of direct executor imports
 import { executeAgent, closeAgentSession } from '../agent/router.js';
 import { buildHelpCard, buildStatusCard, buildErrorCard } from '../lark/card.js';

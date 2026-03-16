@@ -1,8 +1,8 @@
-// src/acpx/session.ts
+// src/session/index.ts
 import { getConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import type { ChatSession, SessionState, ChatState } from '../types/session.js';
-import { createChatSessionKey, parseChatSessionKey } from '../types/session.js';
+import { createChatSessionKey } from '../types/session.js';
 
 const globalState: ChatState = {
   sessions: new Map(),
@@ -22,7 +22,7 @@ export function getOrCreateChatSession(
     const defaultWorkspace = config.workspaces.find((w) => w.default) || config.workspaces[0];
     chatState = {
       currentWorkspace: defaultWorkspace.name,
-      currentAgent: config.agents.default,
+      currentAgent: config.agents?.default || 'claude',
     };
     globalState.chatStates.set(chatId, chatState);
   }
@@ -52,7 +52,7 @@ export function getOrCreateChatSession(
 
 export function updateChatSession(
   chatId: string,
-  updates: { workspace?: string; agent?: string; acpxSessionId?: string; acpxPid?: number }
+  updates: { workspace?: string; agent?: string }
 ): ChatSession | null {
   const chatState = globalState.chatStates.get(chatId);
   if (!chatState) return null;
@@ -69,8 +69,6 @@ export function updateChatSession(
 
   if (session) {
     if (updates.agent) session.agent = updates.agent;
-    if (updates.acpxSessionId !== undefined) session.acpxSessionId = updates.acpxSessionId;
-    if (updates.acpxPid !== undefined) session.acpxPid = updates.acpxPid;
     session.lastActiveAt = new Date();
   }
 
@@ -104,9 +102,6 @@ export function closeChatSession(chatId: string, workspace?: string): boolean {
 
   const ws = workspace || chatState.currentWorkspace;
   const key = createChatSessionKey(chatId, ws);
-  const session = globalState.sessions.get(key);
 
-  // Note: We don't close the acpx session here, just clear the reference
-  // The acpx session should be closed via closeACPXSession in executor.ts
   return globalState.sessions.delete(key);
 }

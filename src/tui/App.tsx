@@ -6,7 +6,7 @@ import { MessageLog } from './components/MessageLog.js';
 import { CommandInput } from './components/CommandInput.js';
 import { useBotManager } from './hooks/useBotManager.js';
 import { getConfig, getDefaultWorkspace, getWorkspaceByName } from '../config.js';
-import { getAllChatSessions } from '../acpx/session.js';
+import { getAllChatSessions } from '../session/index.js';
 import type { LogMessage } from '../lark/events.js';
 
 const COMMANDS_HELP = `
@@ -144,7 +144,7 @@ export function App() {
         addLocalMessage('system', `Lark App ID: ${config.lark.appId}`);
         addLocalMessage('system', `Workspaces: ${config.workspaces.map(w => w.name).join(', ')}`);
         addLocalMessage('system', `Default agent: ${config.agents.default}`);
-        addLocalMessage('system', `ACPX path: ${config.acpx.path}`);
+        addLocalMessage('system', `Agent timeout: ${config.agent?.timeout || 300000}ms`);
         break;
 
       case '/help':

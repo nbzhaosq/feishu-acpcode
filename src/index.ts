@@ -39,7 +39,7 @@ registerCommand('reconnect', async (ctx: MessageContext) => {
 });
 
 registerCommand('clear', async (ctx: MessageContext) => {
-  const { getChatState, closeChatSession, getChatSession } = await import('./acpx/session.js');
+  const { getChatState, closeChatSession, getChatSession } = await import('./session/index.js');
   const { getConfig } = await import('./config.js');
   const config = getConfig();
 

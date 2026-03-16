@@ -1,5 +1,5 @@
 // src/claude/types.ts
-import type { ParsedOutput, ToolCallInfo } from '../acpx/parser.js';
+import type { ParsedOutput, ToolCallInfo } from '../types/agent.js';
 
 /**
  * Claude session state

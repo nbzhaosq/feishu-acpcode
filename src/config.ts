@@ -2,6 +2,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { ConfigSchema, type Config } from './types/config.js';
+import { configureLogger } from './utils/logger.js';
 
 const CONFIG_FILE = 'config.json';
 
@@ -31,6 +32,19 @@ export function loadConfig(configPath?: string): Config {
   }
 
   cachedConfig = result.data;
+
+  // Configure logger with logging settings
+  if (cachedConfig.logging) {
+    configureLogger({
+      level: cachedConfig.logging.level,
+      file: {
+        enabled: cachedConfig.logging.file?.enabled ?? true,
+        path: cachedConfig.logging.file?.path,
+        maxSize: cachedConfig.logging.file?.maxSize,
+      },
+    });
+  }
+
   return cachedConfig;
 }
 

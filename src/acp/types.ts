@@ -2,19 +2,29 @@
 import type * as acp from '@agentclientprotocol/sdk';
 
 /**
+ * API configuration for customizing the Claude/Anthropic API endpoint
+ */
+export interface ApiConfigOptions {
+  /** Custom API base URL (e.g., for proxy servers) */
+  baseUrl?: string;
+  /** API key (optional, will use ANTHROPIC_API_KEY env var if not set) */
+  apiKey?: string;
+}
+
+/**
  * Configuration for ACP agent connection
  */
 export interface ACPAgentConfig {
-  /** Agent executable path (e.g., 'claude', 'acpx', 'opencode') */
-  agentPath: string;
   /** Working directory for the agent */
   cwd: string;
-  /** Agent name (claude, opencode, codex) */
+  /** Agent name (claude, opencode, codex) - used as the command */
   agentName: string;
   /** Timeout in milliseconds */
   timeout?: number;
   /** Additional arguments for the agent */
   args?: string[];
+  /** API configuration (baseUrl, apiKey) */
+  api?: ApiConfigOptions;
 }
 
 /**
