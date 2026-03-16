@@ -1,15 +1,16 @@
 # Feishu ACP Code Bot
 
-A Feishu bot that brings AI coding assistants (Claude Code, OpenCode, Codex) directly into your Feishu chats.
+A Feishu bot that brings Claude Code directly into your Feishu chats.
 
 ## Features
 
 - **Interactive TUI Dashboard**: Beautiful terminal interface for bot management
 - **Real-time Streaming**: Watch AI thinking and tool usage in message cards
-- **Multi-Agent Support**: Switch between Claude Code, OpenCode, and Codex
 - **Session Persistence**: Maintains conversation context across messages
 - **Workspace Management**: Configure multiple project workspaces
 - **Message Deduplication**: Handles duplicate messages from Feishu WebSocket
+- **MCP Servers**: Extend Claude's capabilities with Model Context Protocol servers
+- **Skills Support**: Load custom skills from `.claude/skills/` directories
 
 ## Quick Start
 
@@ -35,15 +36,6 @@ Copy `config.example.json` to `config.json` and fill in your Feishu app credenti
       "path": "/path/to/your/project"
     }
   ],
-  "agents": {
-    "default": "claude",
-    "available": ["claude", "opencode", "codex"]
-  },
-  "acpx": {
-    "path": "acpx",
-    "timeout": 300000,
-    "ttl": 300
-  },
   "api": {
     "baseUrl": "https://api.anthropic.com",
     "apiKey": "sk-ant-your-key"
@@ -89,22 +81,6 @@ acpcode
 | `logging.level` | Log level (debug, info, warn, error) | `info` |
 | `logging.file.enabled` | Enable file logging | `true` |
 | `logging.file.path` | Log file path | `~/.claude/logs/feishu-acpcode.log` |
-
-### Agent Configuration
-
-Configure agent execution settings:
-
-```json
-{
-  "agent": {
-    "timeout": 300000,
-    "throttleInterval": 1500
-  }
-}
-```
-
-- `timeout`: Maximum time to wait for agent response in milliseconds
-- `throttleInterval`: Throttle interval for message card updates in milliseconds
 
 ### API Configuration
 
@@ -228,7 +204,7 @@ The bot starts with an interactive terminal dashboard:
 | `/stop` | Disconnect and stop all agents |
 | `/cancel` | Cancel all running agent tasks |
 | `/status` | Show detailed status |
-| `/agent <name>` | Switch agent |
+| `/agent <name>` | Switch agent (currently only `claude` supported) |
 | `/workspace <name>` | Switch workspace |
 | `/config` | Show configuration |
 | `/logs` | Toggle verbose logging |
@@ -241,21 +217,19 @@ The bot starts with an interactive terminal dashboard:
 |---------|-------------|
 | `/help` | Show available commands |
 | `/status` | Show bot status |
-| `/agent <name>` | Switch agent |
 | `/workspace <name>` | Switch workspace |
 | `/clear` | Clear conversation history |
 
 ## Session Management
 
 - Sessions are automatically tied to workspace directories
-- acpx `sessions ensure` creates/reuses sessions
-- On disconnect, sessions are properly closed via `sessions close`
+- Sessions are managed internally by the Claude Agent SDK
 - Use `/clear` to start a fresh session
 
 ## Requirements
 
 - Node.js 18+
-- [acpx](https://github.com/openclaw/acpx) installed globally
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI installed
 - Feishu App with WebSocket enabled
 
 ## License

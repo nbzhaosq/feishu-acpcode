@@ -7,7 +7,7 @@ A Feishu bot that provides AI coding assistance through ACP (Agent Client Protoc
 This bot connects to Feishu via WebSocket and responds to user messages by executing AI agents. It features:
 
 - **TUI Dashboard**: Interactive terminal interface for managing the bot
-- **Multi-agent Support**: Claude Code, OpenCode, Codex via acpx
+- **Multi-agent Support**: Claude Code, OpenCode, Codex via ACP SDK
 - **Real-time Streaming**: Progress updates and thinking visible in Feishu message cards
 - **Session Management**: Persistent conversation context per chat (tied to workspace path)
 - **Message Deduplication**: Prevents duplicate message processing from Feishu WebSocket
@@ -30,16 +30,29 @@ src/
 │   ├── events.ts         # Event emitter for TUI
 │   ├── message.ts        # Message sending utilities
 │   └── card.ts           # Feishu message card builder
-├── acpx/
-│   ├── executor.ts       # acpx process management, session handling, timeout/ttl
+├── acp/
+│   ├── connection.ts     # ACP connection manager, process spawning
+│   ├── executor.ts       # ACP executor, session handling, timeout
+│   ├── client.ts         # Feishu ACP client implementation
 │   ├── parser.ts         # ACP JSON-RPC message parser
-│   └── session.ts        # Chat session state
+│   └── types.ts          # ACP type definitions
+├── claude/
+│   ├── executor.ts       # Claude Agent SDK executor
+│   ├── session.ts        # Claude session management
+│   └── types.ts          # Claude-specific types
+├── agent/
+│   └── router.ts         # Agent routing (Claude SDK vs ACP SDK)
+├── session/
+│   └── index.ts          # Chat session state management
 ├── commands/
 │   └── router.ts         # Message routing and command handlers
 ├── config.ts             # Configuration loading
+├── utils/
+│   └── logger.ts         # Logging (console + file)
 └── types/
     ├── config.ts         # Config type definitions
     ├── session.ts        # Session type definitions
+    ├── agent.ts          # Shared agent types
     └── lark.ts           # Lark event type definitions
 ```
 
@@ -64,11 +77,27 @@ Create `config.json` from `config.example.json`:
     "default": "claude",
     "available": ["claude", "opencode", "codex"]
   },
-  "acpx": {
-    "path": "acpx",
+  "agent": {
     "timeout": 300000,
-    "ttl": 300,
     "throttleInterval": 1500
+  },
+  "api": {
+    "baseUrl": "https://api.anthropic.com",
+    "apiKey": "sk-ant-xxxxxxxx"
+  },
+  "agentOptions": {
+    "mcpServers": {},
+    "allowedTools": ["Skill"],
+    "settingSources": ["user", "project"],
+    "enableSkills": true
+  },
+  "logging": {
+    "level": "info",
+    "file": {
+      "enabled": true,
+      "path": "~/.claude/logs/feishu-acpcode.log",
+      "maxSize": 10485760
+    }
   }
 }
 ```
@@ -77,10 +106,15 @@ Create `config.json` from `config.example.json`:
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `acpx.path` | Path to acpx executable | `"acpx"` |
-| `acpx.timeout` | Max time to wait for agent response (ms) | `300000` (5 min) |
-| `acpx.ttl` | Queue owner idle TTL before shutdown (seconds) | `300` (5 min) |
-| `acpx.throttleInterval` | Card update throttle interval (ms) | `1500` |
+| `agent.timeout` | Max time to wait for agent response (ms) | `300000` (5 min) |
+| `agent.throttleInterval` | Card update throttle interval (ms) | `1500` |
+| `api.baseUrl` | Custom API base URL | Anthropic API |
+| `api.apiKey` | Custom API key | `ANTHROPIC_API_KEY` env |
+| `agentOptions.mcpServers` | MCP server configurations | `{}` |
+| `agentOptions.allowedTools` | Tools the agent can use | `[]` |
+| `agentOptions.enableSkills` | Enable Skills capability | `true` |
+| `logging.level` | Log level (debug, info, warn, error) | `info` |
+| `logging.file.enabled` | Enable file logging | `true` |
 
 ## Running the Bot
 
@@ -121,34 +155,31 @@ node bin/acpcode.js
 | `/status` | Show bot status |
 | `/agent <name>` | Switch agent for this chat |
 | `/workspace <name>` | Switch workspace for this chat |
-| `/session new` | Create new session (closes acpx session) |
+| `/session new` | Create new session |
 | `/session close` | Close current session |
 | `/clear` | Clear conversation history |
 
 ## Session Management
 
 - Sessions are automatically tied to the workspace directory path
-- `acpx sessions ensure` creates/reuses a session for the workspace
-- On disconnect/exit, `acpx sessions close` is called to properly close sessions
-- Use `/session new` or `/clear` to start fresh (closes existing acpx session)
+- Sessions are managed by the respective SDK (Claude Agent SDK or ACP SDK)
+- Use `/session new` or `/clear` to start fresh
 
 ## Message Flow
 
 1. User sends message to bot in Feishu
 2. Bot receives via WebSocket, deduplicates by message_id
 3. Bot creates/updates session for the chat+workspace
-4. Bot spawns acpx process with `--timeout` and `--ttl` from config
-5. acpx streams ACP JSON-RPC messages
-6. Parser extracts thinking, tool calls, response text
-7. Bot updates Feishu message card with progress (throttled)
-8. On completion, final response is displayed
+4. Bot routes to appropriate executor (Claude SDK or ACP SDK)
+5. Executor streams responses with thinking, tool calls, and text
+6. Bot updates Feishu message card with progress (throttled)
+7. On completion, final response is displayed
 
 ## Cleanup & Timeout
 
 - Internal cleanup: Tasks with no activity for 30 minutes are terminated
-- acpx timeout: Passed via `--timeout` flag (from config.acpx.timeout)
-- acpx ttl: Passed via `--ttl` flag (from config.acpx.ttl)
-- On disconnect/exit: All acpx sessions are closed via `sessions close`
+- Agent timeout: Configurable via `agent.timeout` (default 5 minutes)
+- On disconnect/exit: All sessions are properly closed
 
 ## Development
 
@@ -167,6 +198,8 @@ npm run typecheck
 ### Key Dependencies
 
 - `@larksuiteoapi/node-sdk` - Feishu/Lark SDK for WebSocket connection
+- `@anthropic-ai/claude-agent-sdk` - Claude Agent SDK for native Claude integration
+- `@agentclientprotocol/sdk` - ACP SDK for OpenCode, Codex, and other agents
 - `ink` - React-based TUI framework
 - `react` - UI components
 - `zod` - Configuration validation
@@ -175,7 +208,7 @@ npm run typecheck
 ## Requirements
 
 - Node.js 18+
-- [acpx](https://github.com/openclaw/acpx) installed globally
+- Claude Code, OpenCode, or Codex installed
 - Feishu App with WebSocket enabled
 
 ## License

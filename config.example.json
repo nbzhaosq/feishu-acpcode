@@ -16,7 +16,7 @@
   ],
   "agents": {
     "default": "claude",
-    "available": ["claude", "opencode", "codex"]
+    "available": ["claude"]
   },
   "agent": {
     "timeout": 300000,
