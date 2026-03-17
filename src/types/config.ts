@@ -76,7 +76,7 @@ export const LoggingConfigSchema = z.object({
     path: z.string().optional(),
     /** Max log file size in bytes before rotation (default: 10MB) */
     maxSize: z.number().optional().default(10 * 1024 * 1024),
-  }).optional().default({}),
+  }).optional().default({ enabled: true, maxSize: 10 * 1024 * 1024 }),
 });
 
 export const LarkConfigSchema = z.object({
@@ -87,11 +87,19 @@ export const LarkConfigSchema = z.object({
 export const ConfigSchema = z.object({
   lark: LarkConfigSchema,
   workspaces: z.array(WorkspaceSchema).min(1),
-  agents: AgentsConfigSchema.optional().default({}),
-  agent: AgentExecutionConfigSchema.optional().default({}),
-  api: ApiConfigSchema.optional().default({}),
-  agentOptions: AgentOptionsSchema.optional().default({}),
-  logging: LoggingConfigSchema.optional().default({}),
+  agents: AgentsConfigSchema.optional().default({ default: 'claude', available: ['claude'] }),
+  agent: AgentExecutionConfigSchema.optional().default({ timeout: 300000, throttleInterval: 1500 }),
+  api: ApiConfigSchema.optional(),
+  agentOptions: AgentOptionsSchema.optional().default({
+    mcpServers: {},
+    allowedTools: [],
+    settingSources: ['user', 'project'],
+    enableSkills: true,
+  }),
+  logging: LoggingConfigSchema.optional().default({
+    level: 'info',
+    file: { enabled: true, maxSize: 10 * 1024 * 1024 },
+  }),
 });
 
 // Export types
