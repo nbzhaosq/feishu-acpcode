@@ -126,7 +126,9 @@ export async function executeClaude(options: ClaudeExecutorOptions): Promise<Par
       cwd: workspacePath,
       executable: 'node',
       tools: ['Read', 'Edit', 'Write', 'Bash', 'Glob', 'Grep', 'WebSearch', 'WebFetch'],
-      permissionMode: 'acceptEdits',
+      // Use bypassPermissions for bot use case (no interactive terminal for approvals)
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
       // Pass environment variables (includes API config)
       env,
       // Capture stderr for debugging
